@@ -42,7 +42,7 @@ def generateResponses(groups: list[Group], num_responses: int, num_categories: i
         group_p = rd.random()
         group_of_person_i = prob_to_group[probs[np.argmax(probs > group_p)]]
         for j in range(num_categories):
-            responses[j, i] = rd.normalvariate(group_of_person_i.preferences[j])
+            responses[j, i] = rd.normalvariate(group_of_person_i.preferences[j], sigma=1)
         people[i] = group_of_person_i.name
         
         credits_used = np.sum(responses[:,i]**2)
