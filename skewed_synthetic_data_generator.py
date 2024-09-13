@@ -127,7 +127,7 @@ num_responses = int(1e3)
 num_categories = 4
 synthetic_data_generator = SkewedSyntheticData(groups, num_categories, num_responses)
 
-synthetic_data_generator.data.to_csv('exp1_data/synthetic_data.csv') # export generated data to csv
+synthetic_data_generator.data.to_csv('skewed_synthetic_data.csv') # export generated data to csv
 
 # Regenerate data using same group configuration
 synthetic_data_generator.RegenerateData()

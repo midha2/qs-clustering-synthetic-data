@@ -118,11 +118,11 @@ groups = [Group(name='White', occurrence_prob = 0.59, preferences = [-2, 1, 0, 0
           Group('Black', 0.14, [1, 2, 1, 2]), 
           Group('Hispanic', 0.2, [2, -2, -2, 0]), 
           Group('Asian', 0.07, [-2, -1, 1, 0])]
-num_responses = int(1e4)
+num_responses = int(1e3)
 num_categories = 4
 synthetic_data_generator = NormalSyntheticData(groups, num_categories, num_responses)
 
-synthetic_data_generator.data.to_csv('exp1_data/synthetic_data.csv') # export generated data to csv
+synthetic_data_generator.data.to_csv('normal_synthetic_data.csv') # export generated data to csv
 
 # Regenerate data using same group configuration
 synthetic_data_generator.RegenerateData()
