@@ -20,7 +20,7 @@ class Group:
 #   'Cluster' gives kmeans cluster, 'Group' gives original group
 # data_columns : List of columns in data
 # cluster_list: List where cluster_list[k] corresponds to the entries in data in the kth cluster
-class NormalSyntheticData:
+class SkewedSyntheticData:
     def __verifyGroups(self):
         for g in self.groups: 
             assert len(g.preferences) == self.num_categories, f"Groups must have {self.num_categories} preferences each"
@@ -125,7 +125,7 @@ groups = [Group(name='White', occurrence_prob = 0.59, preferences = [-2, 1, 0, 0
           Group('Asian', 0.07, [-2, -1, 1, 0])]
 num_responses = int(1e3)
 num_categories = 4
-synthetic_data_generator = NormalSyntheticData(groups, num_categories, num_responses)
+synthetic_data_generator = SkewedSyntheticData(groups, num_categories, num_responses)
 
 synthetic_data_generator.data.to_csv('exp1_data/synthetic_data.csv') # export generated data to csv
 
