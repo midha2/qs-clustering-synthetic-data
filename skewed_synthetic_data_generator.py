@@ -7,10 +7,12 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 
 class Group:
-  def __init__(self, name: str, occurrence_prob: float, preferences: list[int]):
-    self.name = name
-    self.prob = occurrence_prob
-    self.preferences = preferences
+    def __init__(self, name: str, occurrence_prob: float, preferences: list[int], sigma=0.5):
+        self.name = name
+        self.prob = occurrence_prob
+        self.preferences = preferences
+        self.sigma = sigma
+
 
 # Generates synthetic data using groups, num_responses, num_categories, credit_budget
 #    (if credit budget not specified, defaults to 4 * num_categories^1.5)
@@ -30,12 +32,13 @@ class SkewedSyntheticData:
     def __mapProbabilitiesToGroups(self):
         prob_to_group = dict()
         p = 0.
-        for group in self.groups:
+        for group in self.scaled_groups:
             prob_to_group[p + group.prob] = group
             p += group.prob
         return prob_to_group
     
     def __generateResponses(self):
+        print('Generating Data...')
         credit_budget = self.credit_budget
         num_categories = self.num_categories
         num_responses = self.num_responses
@@ -53,9 +56,9 @@ class SkewedSyntheticData:
                 mean = np.log(abs(group_of_person_i.preferences[j]) + 1)  # Shift to avoid log(0) issues
             
                 if group_of_person_i.preferences[j] >= 0:
-                    responses[j, i] = np.random.lognormal(mean, self._sigma)
+                    responses[j, i] = np.random.lognormal(mean, sigma=group_of_person_i.sigma)
                 else:
-                    responses[j, i] = -np.random.lognormal(mean, self._sigma)
+                    responses[j, i] = -np.random.lognormal(mean, sigma=group_of_person_i.sigma)
             people[i] = group_of_person_i.name
             credits_used = np.sum(responses[:,i]**2)
             max_preturb = 10
@@ -82,19 +85,20 @@ class SkewedSyntheticData:
         sil = np.zeros(1 + (k_max - k_start))
         # Try a bunch of clusters to see which is the optimal number
         for i in range(k_start, k_max+1):
-            kmeans = KMeans(n_clusters = i).fit(data_scaled)
+            kmeans = KMeans(n_clusters = i, n_init=10).fit(data_scaled)
             labels = kmeans.labels_
             data['Cluster'] = labels
             sil[i - k_start] = silhouette_score(data_scaled, labels, metric = 'euclidean')
         return np.argmax(sil) + k_start
     
     def __optimallyClusterData(self):
+        print('Running kMeans...')
         data = self.data
         optimal_number_of_clusters = self.__findOptimalNumberOfClusters(min_number_of_clusters=2, 
                                                                 max_number_of_clusters=10)
         scaler = StandardScaler()
         data_scaled = scaler.fit_transform(data)
-        kmeans_model = KMeans(n_clusters=optimal_number_of_clusters)
+        kmeans_model = KMeans(n_clusters=optimal_number_of_clusters, n_init=10)
         clusters = kmeans_model.fit_predict(data_scaled)
         data['Cluster'] = clusters
         cluster_list = list([data[data['Cluster'] == i] for i in range(optimal_number_of_clusters)])
@@ -107,25 +111,43 @@ class SkewedSyntheticData:
         self.data, self.cluster_list = self.__optimallyClusterData()
         self.data['Group'] = self.original_groups
 
-    def __init__(self, groups, num_categories, num_responses, credit_budget=-1, sigma=0.5):
+    def _scaleGroups(self):
+        print('Scaling Groups...')
+        self.scaled_groups = []
+        for group in groups:
+            np_preferences = np.array(group.preferences)
+            assert not np.all(np_preferences == 0), f"Can't scale a group with all 0 preferences!"
+            target_budget = self.credit_budget - group.sigma
+            current_spend = np.sum(np_preferences**2)
+            scale_factor = target_budget / current_spend
+            new_preferences = list(np_preferences * np.sqrt(scale_factor))
+            self.scaled_groups.append(Group(group.name, group.prob, 
+                                            new_preferences, 
+                                            group.sigma))
+    
+    def __init__(self, groups, num_categories, num_responses, credit_budget=-1, scaling=False, seed=None):
         self.groups = groups
+        self.scaled_groups = groups
+        self.credit_budget = 4 * (num_categories**1.5) if credit_budget == -1 else credit_budget
+        if scaling: self._scaleGroups()
+        if seed: 
+            np.random.seed(seed)
+            rd.seed(seed)
         self.num_responses = num_responses
         self.num_categories = num_categories
-        self.credit_budget = 4 * (num_categories**1.5) if credit_budget == -1 else credit_budget
-        self._sigma=sigma
         self.RegenerateData()
 
-    def GenerateUsingNewDataset(self, new_groups, new_num_categories, new_num_responses, new_credit_budget=-1, sigma=0.5):
-        self.__init__(new_groups, new_num_categories, new_num_responses, new_credit_budget, sigma)
+    def GenerateUsingNewDataset(self, new_groups, new_num_categories, new_num_responses, new_credit_budget=-1, scaling=False, seed=None):
+        self.__init__(new_groups, new_num_categories, new_num_responses, new_credit_budget, scaling, seed)
 
 # Initialize synthetic data generator using groups, responses, categories
 groups = [Group(name='White', occurrence_prob = 0.59, preferences = [-2, 1, 0, 0]), 
           Group('Black', 0.14, [1, 2, 1, 2]), 
-          Group('Hispanic', 0.2, [2, -2, -2, 0]), 
+          Group('Hispanic', 0.2, [2, -2, -7, 0]), 
           Group('Asian', 0.07, [-2, -1, 1, 0])]
 num_responses = int(1e3)
 num_categories = 4
-synthetic_data_generator = SkewedSyntheticData(groups, num_categories, num_responses)
+synthetic_data_generator = SkewedSyntheticData(groups, num_categories, num_responses, credit_budget=1000, scaling=False)
 
 synthetic_data_generator.data.to_csv('skewed_synthetic_data.csv') # export generated data to csv
 
@@ -133,12 +155,12 @@ synthetic_data_generator.data.to_csv('skewed_synthetic_data.csv') # export gener
 synthetic_data_generator.RegenerateData()
 
 # Regenerate data using new group configuration
-new_groups = [Group(name='White', occurrence_prob = 0.59, preferences = [0, 0, -2, 0]), 
-          Group('Black', 0.14, [1, 6, 1, 2]), 
-          Group('Hispanic', 0.2, [2, -2, 7, 0]), 
-          Group('Asian', 0.07, [4, 4, 4, 4])]
-num_credits = 100
-synthetic_data_generator.GenerateUsingNewDataset(new_groups, num_categories, num_responses, num_credits)
+new_groups = [Group(name='White', occurrence_prob = 0.59, preferences = [-5, 1, 0, 0], sigma=0.2),
+          Group('Black', 0.14, [1, 6, 1, 2], sigma=0.2),
+          Group('Hispanic', 0.2, [2, -2, -7, 0], sigma=0.2), 
+          Group('Asian', 0.07, [-2, -1, 1, 4], sigma=0.2)]
+num_credits = 10000
+synthetic_data_generator.GenerateUsingNewDataset(new_groups, num_categories, num_responses, num_credits, scaling=True, seed=2)
 
 # ARI and NMI measure similarity between clusters and original groups of people
 ari = adjusted_rand_score(synthetic_data_generator.data['Group'], synthetic_data_generator.data['Cluster'])
