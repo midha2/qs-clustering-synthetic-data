@@ -22,6 +22,8 @@ class Group:
 #   'Cluster' gives kmeans cluster, 'Group' gives original group
 # data_columns : List of columns in data
 # cluster_list: List where cluster_list[k] corresponds to the entries in data in the kth cluster
+# Can optionally specify Scaling -- When true, will scale group preferences to use entire credit budget
+# Can also specify random seed
 class SkewedSyntheticData:
     def __verifyGroups(self):
         for g in self.groups: 
@@ -114,10 +116,11 @@ class SkewedSyntheticData:
     def _scaleGroups(self):
         print('Scaling Groups...')
         self.scaled_groups = []
-        for group in groups:
+        for group in self.groups:
             np_preferences = np.array(group.preferences)
             assert not np.all(np_preferences == 0), f"Can't scale a group with all 0 preferences!"
             target_budget = self.credit_budget - group.sigma
+            assert target_budget > 0, f'Credit budget should not be smaller than group sigma'
             current_spend = np.sum(np_preferences**2)
             scale_factor = target_budget / current_spend
             new_preferences = list(np_preferences * np.sqrt(scale_factor))
@@ -155,11 +158,11 @@ synthetic_data_generator.data.to_csv('skewed_synthetic_data.csv') # export gener
 synthetic_data_generator.RegenerateData()
 
 # Regenerate data using new group configuration
-new_groups = [Group(name='White', occurrence_prob = 0.59, preferences = [-5, 1, 0, 0], sigma=0.2),
-          Group('Black', 0.14, [1, 6, 1, 2], sigma=0.2),
-          Group('Hispanic', 0.2, [2, -2, -7, 0], sigma=0.2), 
-          Group('Asian', 0.07, [-2, -1, 1, 4], sigma=0.2)]
-num_credits = 10000
+new_groups = [Group(name='White', occurrence_prob = 0.59, preferences = [-5, 1, 0, 0], sigma=1),
+          Group('Black', 0.14, [1, 6, 1, 2], sigma=0.25),
+          Group('Hispanic', 0.2, [2, -2, -7, 0], sigma=2), 
+          Group('Asian', 0.07, [-3, -1, 1, 4], sigma=0.6)]
+num_credits = 80
 synthetic_data_generator.GenerateUsingNewDataset(new_groups, num_categories, num_responses, num_credits, scaling=True, seed=2)
 
 # ARI and NMI measure similarity between clusters and original groups of people
