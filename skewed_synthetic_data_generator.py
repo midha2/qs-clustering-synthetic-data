@@ -5,6 +5,14 @@ from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
+import sys
+
+def print_loading_bar(iteration, total, length=40):
+    percent = (iteration / total)
+    bar_length = int(length * percent)
+    bar = '█' * bar_length + '-' * (length - bar_length)
+    sys.stdout.write(f'\r|{bar}| {percent:.2%}')
+    sys.stdout.flush()
 
 class Group:
     def __init__(self, name: str, occurrence_prob: float, preferences: list[int], sigma=0.5):
@@ -20,7 +28,8 @@ class Group:
 # original_groups: list where people[i] is the Group of person i
 # data: Dataframe indexed by 'Category_i' for i in range(1, num_categories) inclusive, 
 #   'Cluster' gives kmeans cluster, 'Group' gives original group
-# data_columns : List of columns in data
+# all_columns : List of column names
+# raw_columns : List of column names containing raw data
 # cluster_list: List where cluster_list[k] corresponds to the entries in data in the kth cluster
 # Can optionally specify Scaling -- When true, will scale group preferences to use entire credit budget
 # Can also specify random seed
@@ -87,10 +96,12 @@ class SkewedSyntheticData:
         sil = np.zeros(1 + (k_max - k_start))
         # Try a bunch of clusters to see which is the optimal number
         for i in range(k_start, k_max+1):
+            print_loading_bar(i - k_start, k_max - k_start)
             kmeans = KMeans(n_clusters = i, n_init=10).fit(data_scaled)
             labels = kmeans.labels_
             data['Cluster'] = labels
             sil[i - k_start] = silhouette_score(data_scaled, labels, metric = 'euclidean')
+        print('\n')
         return np.argmax(sil) + k_start
     
     def __optimallyClusterData(self):
@@ -109,7 +120,8 @@ class SkewedSyntheticData:
     def RegenerateData(self):
         self.responses, self.original_groups = self.__generateResponses()
         self.data = pd.DataFrame(self.responses.T, columns=['Category_' + str(i) for i in range(1, self.num_categories + 1)])
-        self.data_columns = ['Category_' + str(i) for i in range(1, self.num_categories + 1)] + ['Cluster', 'Group']
+        self.raw_columns = ['Category_' + str(i) for i in range(1, self.num_categories + 1)]
+        self.all_columns = ['Category_' + str(i) for i in range(1, self.num_categories + 1)] + ['Cluster', 'Group']
         self.data, self.cluster_list = self.__optimallyClusterData()
         self.data['Group'] = self.original_groups
 
@@ -142,40 +154,3 @@ class SkewedSyntheticData:
 
     def GenerateUsingNewDataset(self, new_groups, new_num_categories, new_num_responses, new_credit_budget=-1, scaling=False, seed=None):
         self.__init__(new_groups, new_num_categories, new_num_responses, new_credit_budget, scaling, seed)
-
-# Initialize synthetic data generator using groups, responses, categories
-groups = [Group(name='White', occurrence_prob = 0.59, preferences = [-2, 1, 0, 0]), 
-          Group('Black', 0.14, [1, 2, 1, 2]), 
-          Group('Hispanic', 0.2, [2, -2, -7, 0]), 
-          Group('Asian', 0.07, [-2, -1, 1, 0])]
-num_responses = int(1e3)
-num_categories = 4
-synthetic_data_generator = SkewedSyntheticData(groups, num_categories, num_responses, credit_budget=1000, scaling=False)
-
-synthetic_data_generator.data.to_csv('skewed_synthetic_data.csv') # export generated data to csv
-
-# Regenerate data using same group configuration
-synthetic_data_generator.RegenerateData()
-
-# Regenerate data using new group configuration
-new_groups = [Group(name='White', occurrence_prob = 0.59, preferences = [-5, 1, 0, 0], sigma=1),
-          Group('Black', 0.14, [1, 6, 1, 2], sigma=0.25),
-          Group('Hispanic', 0.2, [2, -2, -7, 0], sigma=2), 
-          Group('Asian', 0.07, [-3, -1, 1, 4], sigma=0.6)]
-num_credits = 80
-synthetic_data_generator.GenerateUsingNewDataset(new_groups, num_categories, num_responses, num_credits, scaling=True, seed=2)
-
-# ARI and NMI measure similarity between clusters and original groups of people
-ari = adjusted_rand_score(synthetic_data_generator.data['Group'], synthetic_data_generator.data['Cluster'])
-nmi = normalized_mutual_info_score(synthetic_data_generator.data['Group'], synthetic_data_generator.data['Cluster'])
-
-# Prints which clusters different groups are placed in
-for group in groups:
-    g = synthetic_data_generator.data[synthetic_data_generator.data['Group'] == group.name]
-    print(g['Cluster'].value_counts(), group.name)
-print(f'Normalized Mutual Information: {nmi}')
-print(f'Adjusted Rand Index: {ari}')
-
-sums = [cluster.iloc[:, 0:num_categories].mean(axis=0) for cluster in synthetic_data_generator.cluster_list]
-# Prints sum of votes in clusters
-print(sums)
