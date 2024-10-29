@@ -7,6 +7,29 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from skewed_synthetic_data_generator import Group, SkewedSyntheticData
 
+def histogram(responses, num_categories):
+    ncols = 3  # Set number of columns (e.g., 3)
+    nrows = (num_categories + ncols - 1) // ncols  # Calculate rows needed based on categories
+
+    # Plot histograms for each category
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows))
+    axes = axes.ravel()
+
+    for i in range(num_categories):
+        axes[i].hist(responses[i], bins=15, color="steelblue", edgecolor="black")
+        axes[i].set_title(f"Category {i+1} Vote Distribution")
+        axes[i].set_xlabel("Votes")
+        axes[i].set_ylabel("Frequency")
+
+    # Hide the last subplot if not used
+    if num_categories < len(axes):
+        for j in range(num_categories, len(axes)):
+            axes[j].axis("off")
+
+    # Adjust layout and save plot
+    plt.tight_layout()
+    plt.savefig("vote_distributions.png")
+
 def run_pca(df):
     print('Running pca...')
     X = StandardScaler().fit_transform(df)
@@ -122,7 +145,7 @@ groups = [Group(name='Group 1', occurrence_prob = 0.4, preferences = [0, 1, 0, 0
           Group('Group 2', 0.2, [1, 2, 3, 2, -3]), 
           Group('Group 3', 0.37, [2, -1, -5, 2, 0]), 
           Group('Group 4', 0.03, [-2, -1, 1, 0, 5])]
-num_responses = int(2**12)
+num_responses = int(2**11)
 num_categories = 5
 synthetic_data_generator = SkewedSyntheticData(groups, num_categories, num_responses, credit_budget=60, scaling=True)
 
@@ -140,3 +163,4 @@ intensity_data[synthetic_data_generator.raw_columns] = synthetic_data_generator.
 plot_side_by_side_radar_by_category(intensity_data, num_categories, 'Group', 'category_radar_intensity')
 plot_side_by_side_radar(intensity_data, num_categories, 'Group', 'Cluster', 'radar_intensity')
 violin(synthetic_data_generator.data, synthetic_data_generator.raw_columns)
+histogram(synthetic_data_generator.responses, num_categories)
