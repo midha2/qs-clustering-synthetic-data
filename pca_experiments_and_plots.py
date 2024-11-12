@@ -7,24 +7,38 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from skewed_synthetic_data_generator import Group, SkewedSyntheticData
 
-def histogram(responses, num_categories):
+def histogram(data, category_columns):
+    num_categories = len(category_columns)
     ncols = 3  # Set number of columns (e.g., 3)
     nrows = (num_categories + ncols - 1) // ncols  # Calculate rows needed based on categories
 
-    # Plot histograms for each category
+    # Plot histograms for each category in data
     fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows))
     axes = axes.ravel()
 
-    for i in range(num_categories):
-        axes[i].hist(responses[i], bins=15, color="steelblue", edgecolor="black")
-        axes[i].set_title(f"Category {i+1} Vote Distribution")
+    # Find the overall y-axis and x-axis limits
+    max_y = 0
+    min_x, max_x = float('inf'), float('-inf')
+
+    for i, col in enumerate(category_columns):
+        # Calculate histogram without plotting to get y-axis limits
+        counts, bins = np.histogram(data[col], bins=15)
+        max_y = max(max_y, counts.max())
+        min_x = min(min_x, bins.min())
+        max_x = max(max_x, bins.max())
+
+    # Plot histograms with consistent y and x limits
+    for i, col in enumerate(category_columns):
+        axes[i].hist(data[col], bins=15, color="steelblue", edgecolor="black")
+        axes[i].set_title(f"{col} Vote Distribution")
         axes[i].set_xlabel("Votes")
         axes[i].set_ylabel("Frequency")
+        axes[i].set_ylim(0, max_y)
+        axes[i].set_xlim(min_x, max_x)
 
-    # Hide the last subplot if not used
-    if num_categories < len(axes):
-        for j in range(num_categories, len(axes)):
-            axes[j].axis("off")
+    # Hide any unused subplots
+    for j in range(num_categories, len(axes)):
+        axes[j].axis("off")
 
     # Adjust layout and save plot
     plt.tight_layout()
@@ -90,11 +104,24 @@ def plot_side_by_side_radar(df, num_categories, col_1, col_2, title):
     num_groups = df[col_1].nunique()
     num_clusters = df[col_2].nunique()
 
-    fig, axes = plt.subplots(2, max(num_groups, num_clusters), figsize=(16, 8), subplot_kw=dict(polar=True))
+    # Adjust subplot layout for single group/cluster cases
+    if num_groups == 1 and num_clusters == 1:
+        fig, axes = plt.subplots(2, 1, figsize=(8, 8), subplot_kw=dict(polar=True))
+        axes = np.array([[axes[0]], [axes[1]]])
+    elif num_groups == 1:
+        fig, axes = plt.subplots(2, num_clusters, figsize=(16, 8), subplot_kw=dict(polar=True))
+        axes[0] = np.array([axes[0]])  # Ensure it’s a 2D array
+    elif num_clusters == 1:
+        fig, axes = plt.subplots(2, num_groups, figsize=(16, 8), subplot_kw=dict(polar=True))
+        axes[1] = np.array([axes[1]])  # Ensure it’s a 2D array
+    else:
+        fig, axes = plt.subplots(2, max(num_groups, num_clusters), figsize=(16, 8), subplot_kw=dict(polar=True))
 
+    # Plot radars for groups and clusters
     _plot_radar_axis(df, num_categories, col_1, 0, axes, categories)
     _plot_radar_axis(df, num_categories, col_2, 1, axes, categories)
 
+    # Hide unused subplots
     if num_groups > num_clusters:
         for j in range(num_clusters, num_groups):
             fig.delaxes(axes[1, j])
@@ -141,26 +168,52 @@ def violin(data, categories):
     plt.grid(True)
     plt.savefig('violin.png')
 
-groups = [Group(name='Group 1', occurrence_prob = 0.4, preferences = [0, 1, 0, 0, 0]), 
-          Group('Group 2', 0.2, [1, 2, 3, 2, -3]), 
-          Group('Group 3', 0.37, [2, -1, -5, 2, 0]), 
-          Group('Group 4', 0.03, [-2, -1, 1, 0, 5])]
-num_responses = int(2**11)
-num_categories = 5
-synthetic_data_generator = SkewedSyntheticData(groups, num_categories, num_responses, credit_budget=60, scaling=True)
+class FilterData:
+    def __init__(self, data, raw_columns):
+        self.data = data.copy()
+        self.original_data = data.copy()
+        self.raw_columns = raw_columns.copy()
+        self.num_categories = len(raw_columns)
+    
+    def filter_data(self, col, quantity, condition="greater"):
+        if condition == "greater":
+            self.data = self.data[self.data[col] > quantity]
+        elif condition == "less":
+            self.data = self.data[self.data[col] < quantity]
+        else:
+            raise ValueError("Condition must be 'greater' or 'less'.")
 
-pca_components = run_pca(synthetic_data_generator.data.loc[:, synthetic_data_generator.raw_columns].values)
-finalDf = pd.concat([pca_components, synthetic_data_generator.data[['Group']]], axis = 1)
-finalDf = pd.concat([finalDf, synthetic_data_generator.data[['Cluster']]], axis = 1)
+        return self.data
+    
+    def unfilter_data(self):
+        # Restore the original data and responses
+        self.data = self.original_data.copy()
+    
+    def make_plots(self):
+        violin(self.data, self.raw_columns)
+        pca_components = run_pca(self.data.loc[:, self.raw_columns].values)
+        finalDf = pd.concat([pca_components, self.data[['Group']]], axis = 1)
+        finalDf = pd.concat([finalDf, self.data[['Cluster']]], axis = 1)
+        plot_side_by_side_radar_by_category(self.data, self.num_categories, 'Group', 'category_radar')
+        plot_side_by_side_radar(self.data, self.num_categories, 'Group', 'Cluster', 'radar')
+        plot_pca_side_by_side(finalDf, 'Group', 'Cluster', 'Colored by Group', 'Colored by Cluster')
 
-plot_side_by_side_radar_by_category(synthetic_data_generator.data, num_categories, 'Group', 'category_radar')
-plot_side_by_side_radar(synthetic_data_generator.data, num_categories, 'Group', 'Cluster', 'radar')
-plot_pca_side_by_side(finalDf, 'Group', 'Cluster', 'Colored by Group', 'Colored by Cluster')
+        intensity_data = self.data.copy()
+        intensity_data[self.raw_columns] = self.data[self.raw_columns].abs()
 
-intensity_data = synthetic_data_generator.data.copy()
-intensity_data[synthetic_data_generator.raw_columns] = synthetic_data_generator.data[synthetic_data_generator.raw_columns].abs()
+        plot_side_by_side_radar_by_category(intensity_data, self.num_categories, 'Group', 'category_radar_intensity')
+        plot_side_by_side_radar(intensity_data, self.num_categories, 'Group', 'Cluster', 'radar_intensity')
+        histogram(self.data, self.raw_columns)
 
-plot_side_by_side_radar_by_category(intensity_data, num_categories, 'Group', 'category_radar_intensity')
-plot_side_by_side_radar(intensity_data, num_categories, 'Group', 'Cluster', 'radar_intensity')
-violin(synthetic_data_generator.data, synthetic_data_generator.raw_columns)
-histogram(synthetic_data_generator.responses, num_categories)
+# groups = [Group(name='Group 1', occurrence_prob = 0.3, preferences = [0, 1, 0, 0, 0]), 
+#           Group('Group 2', 0.2, [1, 2, 3, 2, -3]), 
+#           Group('Group 3', 0.3, [2, -1, -5, 2, 0]), 
+#           Group('Group 4', 0.2, [-5, -1, 1, 0, 5])]
+# num_responses = int(2**11)
+# num_categories = 5
+# synthetic_data_generator = SkewedSyntheticData(groups, num_categories, num_responses, credit_budget=60)
+
+# f = FilterData(synthetic_data_generator.data, synthetic_data_generator.raw_columns)
+# f.filter_data('Category_1', -4, 'less')
+# f.filter_data('Category_5', 2)
+# f.make_plots()
