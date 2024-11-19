@@ -124,6 +124,7 @@ class SkewedSyntheticData:
         self.all_columns = ['Category_' + str(i) for i in range(1, self.num_categories + 1)] + ['Cluster', 'Group']
         self.data, self.cluster_list = self.__optimallyClusterData()
         self.data['Group'] = self.original_groups
+        self.data.to_csv('skewed_synthetic_data.csv')
 
     def _scaleGroups(self):
         print('Scaling Groups...')

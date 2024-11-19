@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 from skewed_synthetic_data_generator import Group, SkewedSyntheticData
@@ -168,6 +170,50 @@ def violin(data, categories):
     plt.grid(True)
     plt.savefig('violin.png')
 
+def clustered_violins(data, categories):
+    # Melt the data once for global min and max
+    melted_data = data.melt(
+        id_vars=['Cluster'], 
+        value_vars=categories, 
+        var_name='Category', 
+        value_name='Value'
+    )
+    
+    # Find global min and max for y-axis
+    y_min, y_max = melted_data['Value'].min(), melted_data['Value'].max()
+
+    for cluster in data['Cluster'].unique():
+        cluster_data = data[data['Cluster'] == cluster]  # Filter data for the cluster
+        cluster_size = len(cluster_data)  # Size of the cluster
+
+        plt.figure(figsize=(10, 6))
+        melted_data = cluster_data.melt(
+            id_vars=['Cluster'], 
+            value_vars=categories, 
+            var_name='Category', 
+            value_name='Value'
+        )
+        sns.violinplot(x='Category', y='Value', data=melted_data, palette='Set2')
+        plt.title(f'Violin Plot for Cluster {cluster}')
+        plt.xlabel('Category')
+        plt.ylabel('Value')
+        plt.grid(True)
+        plt.ylim(y_min, y_max)  # Set the same y-axis limits for all plots
+
+        # Add cluster size as annotation
+        plt.text(
+            x=-0.5, y=y_max, 
+            s=f'Cluster Size: {cluster_size}', 
+            fontsize=12, 
+            color='red', 
+            ha='left', 
+            va='top'
+        )
+
+        plt.savefig(f'violin_cluster_{cluster}.png')
+        plt.close()  # Close the figure to prevent overlapping
+
+
 class FilterData:
     def __init__(self, data, raw_columns):
         self.data = data.copy()
@@ -185,6 +231,32 @@ class FilterData:
 
         return self.data
     
+    def __findOptimalNumberOfClusters(self, min_number_of_clusters, max_number_of_clusters):
+        data = self.data[self.raw_columns]
+        scaler = StandardScaler()
+        data_scaled = scaler.fit_transform(data)
+        k_start = min_number_of_clusters
+        k_max = max_number_of_clusters
+        sil = np.zeros(1 + (k_max - k_start))
+        # Try a bunch of clusters to see which is the optimal number
+        for i in range(k_start, k_max+1):
+            kmeans = KMeans(n_clusters = i, n_init=10).fit(data_scaled)
+            labels = kmeans.labels_
+            data.loc[:, 'Cluster'] = labels
+            sil[i - k_start] = silhouette_score(data_scaled, labels, metric = 'euclidean')
+        return np.argmax(sil) + k_start
+    
+    def reClusterData(self):
+        data = self.data[self.raw_columns]
+        optimal_number_of_clusters = self.__findOptimalNumberOfClusters(min_number_of_clusters=2, 
+                                                                max_number_of_clusters=10)
+        scaler = StandardScaler()
+        data_scaled = scaler.fit_transform(data)
+        kmeans_model = KMeans(n_clusters=optimal_number_of_clusters, n_init=10)
+        clusters = kmeans_model.fit_predict(data_scaled)
+        self.data.loc[:, 'Cluster'] = clusters
+        return data
+
     def unfilter_data(self):
         # Restore the original data and responses
         self.data = self.original_data.copy()
@@ -194,26 +266,14 @@ class FilterData:
         pca_components = run_pca(self.data.loc[:, self.raw_columns].values)
         finalDf = pd.concat([pca_components, self.data[['Group']]], axis = 1)
         finalDf = pd.concat([finalDf, self.data[['Cluster']]], axis = 1)
-        plot_side_by_side_radar_by_category(self.data, self.num_categories, 'Group', 'category_radar')
+        plot_side_by_side_radar_by_category(self.data, self.num_categories, 'Cluster', 'category_radar')
         plot_side_by_side_radar(self.data, self.num_categories, 'Group', 'Cluster', 'radar')
         plot_pca_side_by_side(finalDf, 'Group', 'Cluster', 'Colored by Group', 'Colored by Cluster')
 
         intensity_data = self.data.copy()
         intensity_data[self.raw_columns] = self.data[self.raw_columns].abs()
 
-        plot_side_by_side_radar_by_category(intensity_data, self.num_categories, 'Group', 'category_radar_intensity')
+        plot_side_by_side_radar_by_category(intensity_data, self.num_categories, 'Cluster', 'category_radar_intensity')
         plot_side_by_side_radar(intensity_data, self.num_categories, 'Group', 'Cluster', 'radar_intensity')
         histogram(self.data, self.raw_columns)
-
-# groups = [Group(name='Group 1', occurrence_prob = 0.3, preferences = [0, 1, 0, 0, 0]), 
-#           Group('Group 2', 0.2, [1, 2, 3, 2, -3]), 
-#           Group('Group 3', 0.3, [2, -1, -5, 2, 0]), 
-#           Group('Group 4', 0.2, [-5, -1, 1, 0, 5])]
-# num_responses = int(2**11)
-# num_categories = 5
-# synthetic_data_generator = SkewedSyntheticData(groups, num_categories, num_responses, credit_budget=60)
-
-# f = FilterData(synthetic_data_generator.data, synthetic_data_generator.raw_columns)
-# f.filter_data('Category_1', -4, 'less')
-# f.filter_data('Category_5', 2)
-# f.make_plots()
+        clustered_violins(self.data, self.raw_columns)
