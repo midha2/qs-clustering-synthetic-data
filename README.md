@@ -1,5 +1,5 @@
-# qs-clustering-synthetic-data
-'synthetic_data_generator' generates synthetic QS data partitioned into diffferent groups, exports data into CSV (might have to change file path), and clusters using kmeans
+# qs-clustering-synthetic-data: USE SKEWED DATA GENERATOR
+'skewed_synthetic_data_generator' generates synthetic QS data partitioned into diffferent groups, exports data into CSV (might have to change file path), and clusters using kmeans
 
 ##### Groups have three attributes: 
 
