@@ -67,7 +67,7 @@ st.image(violin_image, caption='Violin Plot of Category Responses', use_column_w
 data = st.session_state.data.data
 st.title("Clustered Violin Plots")
 for cluster in data['Cluster'].unique():
-    plot_path = f'violin_cluster_{cluster}.png'
+    plot_path = f'violin_cluster_{cluster}_with_size.png'
     st.subheader(f'Cluster {cluster}')
     image = Image.open(plot_path)
     st.image(image, caption=f'Violin Plot for Cluster {cluster}', use_column_width=True)
