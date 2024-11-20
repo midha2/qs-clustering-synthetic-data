@@ -243,6 +243,88 @@ def clustered_violins_with_sizes(data, categories, original_data_size):
         plt.savefig(f'violin_cluster_{cluster}_with_size.png')
         plt.close()
 
+def clustered_violins_with_stacked_sizes(data, categories, original_data_size):
+    # Melt the data once for global min and max
+    melted_data = data.melt(
+        id_vars=['Cluster'], 
+        value_vars=categories, 
+        var_name='Category', 
+        value_name='Value'
+    )
+    
+    # Find global min and max for y-axis
+    y_min, y_max = melted_data['Value'].min(), melted_data['Value'].max()
+
+    filtered_data_size = len(data)  # Size of the filtered dataset
+
+    for cluster in data['Cluster'].unique():
+        cluster_data = data[data['Cluster'] == cluster]  # Filter data for the cluster
+        cluster_size = len(cluster_data)  # Size of the cluster
+        cluster_fraction = cluster_size / original_data_size  # Fraction of original data size
+        filtered_fraction = filtered_data_size / original_data_size  # Fraction of filtered data size
+
+        # Create a figure with subplots
+        fig, axes = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1]})
+
+        # Violin Plot
+        melted_cluster_data = cluster_data.melt(
+            id_vars=['Cluster'], 
+            value_vars=categories, 
+            var_name='Category', 
+            value_name='Value'
+        )
+        sns.violinplot(x='Category', y='Value', data=melted_cluster_data, palette='Set2', ax=axes[0])
+        axes[0].set_title(f'Violin Plot for Cluster {cluster}')
+        axes[0].set_xlabel('Category')
+        axes[0].set_ylabel('Value')
+        axes[0].set_ylim(y_min, y_max)
+        axes[0].grid(True)
+
+        # Stacked Bar Plot for Cluster Size
+        axes[1].bar(
+            x=['Cluster'], 
+            height=[filtered_fraction], 
+            color='gray', 
+            label='Filtered Data'
+        )
+        axes[1].bar(
+            x=['Cluster'], 
+            height=[cluster_fraction], 
+            color='blue', 
+            label='Cluster Size'
+        )
+        axes[1].set_title(f'Cluster {cluster} Size')
+        axes[1].set_ylim(0, 1)
+        axes[1].set_ylabel('Fraction of Original Dataset')
+        axes[1].set_xlabel('')
+        axes[1].legend(loc='upper left')
+
+        # Add percentage annotations for stacked bars
+        # axes[1].text(
+        #     x=0, y=filtered_fraction / 2, 
+        #     s=f'{filtered_fraction:.2%}', 
+        #     color='white', fontsize=10, ha='center', va='center'
+        # )
+        # axes[1].text(
+        #     x=0, y=cluster_fraction + filtered_fraction / 2, 
+        #     s=f'{cluster_fraction:.2%}', 
+        #     color='white', fontsize=10, ha='center', va='center'
+        # )
+
+        # Add size annotations
+        axes[1].text(
+            x=0, y=-0.05, 
+            s=f'Cluster Size: {cluster_size}\nFiltered Size: {filtered_data_size}', 
+            fontsize=10, ha='center', va='top'
+        )
+
+        # Add a title with the original dataset size
+        fig.suptitle(f'Original Dataset Size: {original_data_size}', fontsize=12, y=0.98)
+
+        # Save the figure
+        plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to accommodate the title
+        plt.savefig(f'violin_cluster_{cluster}_with_stacked_size.png')
+        plt.close()
 
 
 
@@ -310,3 +392,4 @@ class FilterData:
         plot_side_by_side_radar(intensity_data, self.num_categories, 'Group', 'Cluster', 'radar_intensity')
         histogram(self.data, self.raw_columns)
         clustered_violins_with_sizes(self.data, self.raw_columns, self.original_data.shape[0])
+        clustered_violins_with_stacked_sizes(self.data, self.raw_columns, self.original_data.shape[0])
