@@ -170,49 +170,6 @@ def violin(data, categories):
     plt.grid(True)
     plt.savefig('violin.png')
 
-# def clustered_violins(data, categories):
-#     # Melt the data once for global min and max
-#     melted_data = data.melt(
-#         id_vars=['Cluster'], 
-#         value_vars=categories, 
-#         var_name='Category', 
-#         value_name='Value'
-#     )
-    
-#     # Find global min and max for y-axis
-#     y_min, y_max = melted_data['Value'].min(), melted_data['Value'].max()
-
-#     for cluster in data['Cluster'].unique():
-#         cluster_data = data[data['Cluster'] == cluster]  # Filter data for the cluster
-#         cluster_size = len(cluster_data)  # Size of the cluster
-
-#         plt.figure(figsize=(10, 6))
-#         melted_data = cluster_data.melt(
-#             id_vars=['Cluster'], 
-#             value_vars=categories, 
-#             var_name='Category', 
-#             value_name='Value'
-#         )
-#         sns.violinplot(x='Category', y='Value', data=melted_data, palette='Set2')
-#         plt.title(f'Violin Plot for Cluster {cluster}')
-#         plt.xlabel('Category')
-#         plt.ylabel('Value')
-#         plt.grid(True)
-#         plt.ylim(y_min, y_max)  # Set the same y-axis limits for all plots
-
-#         # Add cluster size as annotation
-#         plt.text(
-#             x=-0.5, y=y_max, 
-#             s=f'Cluster Size: {cluster_size}', 
-#             fontsize=12, 
-#             color='red', 
-#             ha='left', 
-#             va='top'
-#         )
-
-#         plt.savefig(f'violin_cluster_{cluster}.png')
-#         plt.close()  # Close the figure to prevent overlapping
-
 def clustered_violins_with_sizes(data, categories, original_data_size):
     # Melt the data once for global min and max
     melted_data = data.melt(
