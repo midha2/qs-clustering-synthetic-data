@@ -40,6 +40,9 @@ if st.sidebar.button("Clear Filter"):
 
 # Display plots
 st.header("Histograms")
+total_votes = Image.open('total_votes.png')
+st.image(total_votes, use_column_width=True)
+
 hist = Image.open('vote_distributions.png')
 st.image(hist, use_column_width=True)
 

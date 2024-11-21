@@ -9,6 +9,25 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from skewed_synthetic_data_generator import Group, SkewedSyntheticData
 
+def total_votes(data, category_columns):
+    # Calculate the sum of votes for each column
+    vote_totals = data[category_columns].sum()
+
+    # Create the bar chart
+    plt.figure(figsize=(10, 6))
+    vote_totals.plot(kind='bar', color='skyblue', edgecolor='black')
+
+    # Customize the chart
+    plt.title('Total Votes by Category', fontsize=16)
+    plt.xlabel('Category', fontsize=14)
+    plt.ylabel('Total Votes', fontsize=14)
+    plt.xticks(rotation=45, fontsize=12)
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+
+    # Display the chart
+    plt.tight_layout()
+    plt.savefig('total_votes.png')
+
 def histogram(data, category_columns):
     num_categories = len(category_columns)
     ncols = 3  # Set number of columns (e.g., 3)
@@ -393,3 +412,4 @@ class FilterData:
         histogram(self.data, self.raw_columns)
         clustered_violins_with_sizes(self.data, self.raw_columns, self.original_data.shape[0])
         clustered_violins_with_stacked_sizes(self.data, self.raw_columns, self.original_data.shape[0])
+        total_votes(self.data, self.raw_columns)
