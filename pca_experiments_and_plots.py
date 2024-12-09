@@ -65,6 +65,159 @@ def histogram(data, category_columns):
     plt.tight_layout()
     plt.savefig("vote_distributions.png")
 
+def violin(data, categories):
+    plt.figure(figsize=(10, 6))
+    sns.violinplot(data=data[categories])
+    plt.title('Violin Plot of Category Responses')
+    plt.xlabel('Categories')
+    plt.ylabel('Response Values')
+    plt.grid(True)
+    plt.savefig('violin.png')
+
+def clustered_violins_with_stacked_sizes(data, categories, original_data_size):
+    # Melt the data once for global min and max
+    melted_data = data.melt(
+        id_vars=['Cluster'], 
+        value_vars=categories, 
+        var_name='Category', 
+        value_name='Value'
+    )
+    
+    # Find global min and max for y-axis
+    y_min, y_max = melted_data['Value'].min(), melted_data['Value'].max()
+
+    filtered_data_size = len(data)  # Size of the filtered dataset
+    filtered_fraction = filtered_data_size / original_data_size  # Fraction of filtered data size
+
+    for cluster in data['Cluster'].unique():
+        cluster_data = data[data['Cluster'] == cluster]  # Filter data for the cluster
+        cluster_size = len(cluster_data)  # Size of the current cluster
+        cluster_fraction = cluster_size / original_data_size  # Fraction of original data size
+
+        # Calculate cluster fractions for filtered data
+        cluster_sizes_filtered = [
+            len(data[data['Cluster'] == c]) / filtered_data_size
+            for c in data['Cluster'].unique()
+        ]
+        cumulative_sizes = [sum(cluster_sizes_filtered[:i]) for i in range(len(cluster_sizes_filtered))]
+        cluster_colors = ['blue' if c == cluster else 'gray' for c in data['Cluster'].unique()]
+
+        # Create a figure with subplots
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6), gridspec_kw={'width_ratios': [2, 1]})
+
+        # Violin Plot
+        melted_cluster_data = cluster_data.melt(
+            id_vars=['Cluster'], 
+            value_vars=categories, 
+            var_name='Category', 
+            value_name='Value'
+        )
+        sns.violinplot(x='Category', y='Value', data=melted_cluster_data, palette='Set2', ax=axes[0])
+        axes[0].set_title(f'Violin Plot for Cluster {cluster}')
+        axes[0].set_xlabel('Category')
+        axes[0].set_ylabel('Value')
+        axes[0].set_ylim(y_min, y_max)
+        axes[0].grid(True)
+
+        # Stacked Bar Plot
+        for i, (size, color) in enumerate(zip(cluster_sizes_filtered, cluster_colors)):
+            axes[1].bar(
+                x=[f'Filtered Data Size: {filtered_data_size}'], 
+                height=[size * filtered_fraction], 
+                bottom=[cumulative_sizes[i] * filtered_fraction], 
+                color=color, 
+                edgecolor='black'
+            )
+        
+        axes[1].set_title(f'Cluster Sizes (Filtered Data: {filtered_fraction * 100:.1f}%)')
+        axes[1].set_ylim(0, 1)
+        axes[1].set_ylabel('Fraction of Original Dataset')
+        axes[1].set_xlabel('')
+
+        # Annotate the current cluster size
+        current_cluster_index = list(data['Cluster'].unique()).index(cluster)
+        current_bottom = cumulative_sizes[current_cluster_index] * filtered_fraction
+        axes[1].text(
+            x=0, 
+            y=current_bottom + cluster_sizes_filtered[current_cluster_index] * filtered_fraction / 2,
+            s=f'{cluster_fraction * 100:.1f}%', 
+            ha='center', va='center', color='white', weight='bold', fontsize=10
+        )
+
+        # Add a title with the original dataset size
+        fig.suptitle(f'Original Dataset Size: {original_data_size}', fontsize=12, y=0.98)
+
+        # Save the figure
+        plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to accommodate the title
+        plt.savefig(f'violin_cluster_{cluster}_with_stacked_size.png')
+        plt.close()
+
+class FilterData:
+    def __init__(self, data, raw_columns):
+        self.data = data.copy()
+        self.original_data = data.copy()
+        self.raw_columns = raw_columns.copy()
+        self.num_categories = len(raw_columns)
+    
+    def rename_column(self, col_to_rename, new_name):
+        assert col_to_rename in self.data.columns, "Cannot rename column that does not exist!"
+        self.data.rename(columns={col_to_rename: new_name}, inplace=True)
+        self.original_data.rename(columns={col_to_rename: new_name}, inplace=True)
+        idx_to_rep = self.raw_columns.index(col_to_rename)
+        self.raw_columns[idx_to_rep] = new_name
+    
+    def filter_data(self, col, quantity, condition="greater"):
+        if condition == "greater":
+            self.data = self.data[self.data[col] > quantity]
+        elif condition == "less":
+            self.data = self.data[self.data[col] < quantity]
+        else:
+            raise ValueError("Condition must be 'greater' or 'less'.")
+
+        return self.data
+    
+    def __findOptimalNumberOfClusters(self, min_number_of_clusters, max_number_of_clusters):
+        data = self.data[self.raw_columns]
+        scaler = StandardScaler()
+        data_scaled = scaler.fit_transform(data)
+        k_start = min_number_of_clusters
+        k_max = max_number_of_clusters
+        sil = np.zeros(1 + (k_max - k_start))
+        # Try a bunch of clusters to see which is the optimal number
+        for i in range(k_start, k_max+1):
+            kmeans = KMeans(n_clusters = i, n_init=10).fit(data_scaled)
+            labels = kmeans.labels_
+            data.loc[:, 'Cluster'] = labels
+            sil[i - k_start] = silhouette_score(data_scaled, labels, metric = 'euclidean')
+        return np.argmax(sil) + k_start
+    
+    def reClusterData(self):
+        data = self.data[self.raw_columns]
+        optimal_number_of_clusters = self.__findOptimalNumberOfClusters(min_number_of_clusters=2, 
+                                                                max_number_of_clusters=10)
+        scaler = StandardScaler()
+        data_scaled = scaler.fit_transform(data)
+        kmeans_model = KMeans(n_clusters=optimal_number_of_clusters, n_init=10)
+        clusters = kmeans_model.fit_predict(data_scaled)
+        self.data.loc[:, 'Cluster'] = clusters
+        return data
+
+    def unfilter_data(self):
+        # Restore the original data and responses
+        self.data = self.original_data.copy()
+    
+    def make_plots(self):
+        histogram(self.data, self.raw_columns)
+        violin(self.data, self.raw_columns)
+        clustered_violins_with_stacked_sizes(self.data, self.raw_columns, self.original_data.shape[0])
+        total_votes(self.data, self.raw_columns)
+
+    def to_csv(self, name='data.csv'):
+        self.data.to_csv(name)
+
+
+#### WE ARENT USING THESE ####
+
 def run_pca(df):
     print('Running pca...')
     X = StandardScaler().fit_transform(df)
@@ -179,237 +332,3 @@ def plot_side_by_side_radar_by_category(df, num_categories, col, title):
 
     plt.tight_layout()
     plt.savefig(f'{title}.png')
-
-def violin(data, categories):
-    plt.figure(figsize=(10, 6))
-    sns.violinplot(data=data[categories])
-    plt.title('Violin Plot of Category Responses')
-    plt.xlabel('Categories')
-    plt.ylabel('Response Values')
-    plt.grid(True)
-    plt.savefig('violin.png')
-
-def clustered_violins_with_sizes(data, categories, original_data_size):
-    # Melt the data once for global min and max
-    melted_data = data.melt(
-        id_vars=['Cluster'], 
-        value_vars=categories, 
-        var_name='Category', 
-        value_name='Value'
-    )
-    
-    # Find global min and max for y-axis
-    y_min, y_max = melted_data['Value'].min(), melted_data['Value'].max()
-
-    filtered_data_size = len(data)  # Size of the filtered dataset
-
-    for cluster in data['Cluster'].unique():
-        cluster_data = data[data['Cluster'] == cluster]  # Filter data for the cluster
-        cluster_size = len(cluster_data)  # Size of the cluster
-        cluster_fraction = cluster_size / original_data_size  # Fraction of original data size
-        filtered_fraction = filtered_data_size / original_data_size  # Fraction of filtered data size
-
-        # Create a figure with subplots
-        fig, axes = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1]})
-
-        # Violin Plot
-        melted_cluster_data = cluster_data.melt(
-            id_vars=['Cluster'], 
-            value_vars=categories, 
-            var_name='Category', 
-            value_name='Value'
-        )
-        sns.violinplot(x='Category', y='Value', data=melted_cluster_data, palette='Set2', ax=axes[0])
-        axes[0].set_title(f'Violin Plot for Cluster {cluster}')
-        axes[0].set_xlabel('Category')
-        axes[0].set_ylabel('Value')
-        axes[0].set_ylim(y_min, y_max)
-        axes[0].grid(True)
-
-        # Bar Plot for Cluster and Filtered Data Size
-        bars = axes[1].bar(['Filtered Data', 'Cluster'], [filtered_fraction, cluster_fraction], color=['gray', 'blue'])
-        axes[1].set_title(f'Cluster {cluster} Size')
-        axes[1].set_ylim(0, 1)
-        axes[1].set_ylabel('Fraction of Original Dataset')
-        axes[1].set_xlabel('')
-
-        # Add text annotations for percentages
-        axes[1].bar_label(
-            bars, 
-            labels=[f'{filtered_fraction:.2%}', f''],
-                    # f'{cluster_fraction:.2%}'], 
-            label_type='edge', 
-            fontsize=10
-        )
-
-        # Add size annotations below the bars
-        axes[1].text(
-            x=0, y=-0.05, 
-            s=f'Filtered Size: {filtered_data_size}', 
-            fontsize=10, ha='center', va='top'
-        )
-        axes[1].text(
-            x=1, y=-0.05, 
-            s=f'Cluster Size: {cluster_size}', 
-            fontsize=10, ha='center', va='top'
-        )
-
-        # Add a title with the original dataset size
-        fig.suptitle(f'Original Dataset Size: {original_data_size}', fontsize=12, y=0.98)
-
-        # Save the figure
-        plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to accommodate the title
-        plt.savefig(f'violin_cluster_{cluster}_with_size.png')
-        plt.close()
-
-def clustered_violins_with_stacked_sizes(data, categories, original_data_size):
-    # Melt the data once for global min and max
-    melted_data = data.melt(
-        id_vars=['Cluster'], 
-        value_vars=categories, 
-        var_name='Category', 
-        value_name='Value'
-    )
-    
-    # Find global min and max for y-axis
-    y_min, y_max = melted_data['Value'].min(), melted_data['Value'].max()
-
-    filtered_data_size = len(data)  # Size of the filtered dataset
-
-    for cluster in data['Cluster'].unique():
-        cluster_data = data[data['Cluster'] == cluster]  # Filter data for the cluster
-        cluster_size = len(cluster_data)  # Size of the cluster
-        cluster_fraction = cluster_size / original_data_size  # Fraction of original data size
-        filtered_fraction = filtered_data_size / original_data_size  # Fraction of filtered data size
-
-        # Create a figure with subplots
-        fig, axes = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1]})
-
-        # Violin Plot
-        melted_cluster_data = cluster_data.melt(
-            id_vars=['Cluster'], 
-            value_vars=categories, 
-            var_name='Category', 
-            value_name='Value'
-        )
-        sns.violinplot(x='Category', y='Value', data=melted_cluster_data, palette='Set2', ax=axes[0])
-        axes[0].set_title(f'Violin Plot for Cluster {cluster}')
-        axes[0].set_xlabel('Category')
-        axes[0].set_ylabel('Value')
-        axes[0].set_ylim(y_min, y_max)
-        axes[0].grid(True)
-
-        # Stacked Bar Plot for Cluster Size
-        axes[1].bar(
-            x=['Cluster'], 
-            height=[filtered_fraction], 
-            color='gray', 
-            label='Filtered Data'
-        )
-        axes[1].bar(
-            x=['Cluster'], 
-            height=[cluster_fraction], 
-            color='blue', 
-            label='Cluster Size'
-        )
-        axes[1].set_title(f'Cluster {cluster} Size')
-        axes[1].set_ylim(0, 1)
-        axes[1].set_ylabel('Fraction of Original Dataset')
-        axes[1].set_xlabel('')
-        axes[1].legend(loc='upper left')
-
-        # Add percentage annotations for stacked bars
-        # axes[1].text(
-        #     x=0, y=filtered_fraction / 2, 
-        #     s=f'{filtered_fraction:.2%}', 
-        #     color='white', fontsize=10, ha='center', va='center'
-        # )
-        # axes[1].text(
-        #     x=0, y=cluster_fraction + filtered_fraction / 2, 
-        #     s=f'{cluster_fraction:.2%}', 
-        #     color='white', fontsize=10, ha='center', va='center'
-        # )
-
-        # Add size annotations
-        axes[1].text(
-            x=0, y=-0.05, 
-            s=f'Cluster Size: {cluster_size}\nFiltered Size: {filtered_data_size}', 
-            fontsize=10, ha='center', va='top'
-        )
-
-        # Add a title with the original dataset size
-        fig.suptitle(f'Original Dataset Size: {original_data_size}', fontsize=12, y=0.98)
-
-        # Save the figure
-        plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to accommodate the title
-        plt.savefig(f'violin_cluster_{cluster}_with_stacked_size.png')
-        plt.close()
-
-
-
-
-class FilterData:
-    def __init__(self, data, raw_columns):
-        self.data = data.copy()
-        self.original_data = data.copy()
-        self.raw_columns = raw_columns.copy()
-        self.num_categories = len(raw_columns)
-    
-    def filter_data(self, col, quantity, condition="greater"):
-        if condition == "greater":
-            self.data = self.data[self.data[col] > quantity]
-        elif condition == "less":
-            self.data = self.data[self.data[col] < quantity]
-        else:
-            raise ValueError("Condition must be 'greater' or 'less'.")
-
-        return self.data
-    
-    def __findOptimalNumberOfClusters(self, min_number_of_clusters, max_number_of_clusters):
-        data = self.data[self.raw_columns]
-        scaler = StandardScaler()
-        data_scaled = scaler.fit_transform(data)
-        k_start = min_number_of_clusters
-        k_max = max_number_of_clusters
-        sil = np.zeros(1 + (k_max - k_start))
-        # Try a bunch of clusters to see which is the optimal number
-        for i in range(k_start, k_max+1):
-            kmeans = KMeans(n_clusters = i, n_init=10).fit(data_scaled)
-            labels = kmeans.labels_
-            data.loc[:, 'Cluster'] = labels
-            sil[i - k_start] = silhouette_score(data_scaled, labels, metric = 'euclidean')
-        return np.argmax(sil) + k_start
-    
-    def reClusterData(self):
-        data = self.data[self.raw_columns]
-        optimal_number_of_clusters = self.__findOptimalNumberOfClusters(min_number_of_clusters=2, 
-                                                                max_number_of_clusters=10)
-        scaler = StandardScaler()
-        data_scaled = scaler.fit_transform(data)
-        kmeans_model = KMeans(n_clusters=optimal_number_of_clusters, n_init=10)
-        clusters = kmeans_model.fit_predict(data_scaled)
-        self.data.loc[:, 'Cluster'] = clusters
-        return data
-
-    def unfilter_data(self):
-        # Restore the original data and responses
-        self.data = self.original_data.copy()
-    
-    def make_plots(self):
-        violin(self.data, self.raw_columns)
-        pca_components = run_pca(self.data.loc[:, self.raw_columns].values)
-        finalDf = pd.concat([pca_components, self.data[['Group']]], axis = 1)
-        finalDf = pd.concat([finalDf, self.data[['Cluster']]], axis = 1)
-        plot_side_by_side_radar_by_category(self.data, self.num_categories, 'Cluster', 'category_radar')
-        plot_side_by_side_radar(self.data, self.num_categories, 'Group', 'Cluster', 'radar')
-        plot_pca_side_by_side(finalDf, 'Group', 'Cluster', 'Colored by Group', 'Colored by Cluster')
-
-        intensity_data = self.data.copy()
-        intensity_data[self.raw_columns] = self.data[self.raw_columns].abs()
-
-        plot_side_by_side_radar_by_category(intensity_data, self.num_categories, 'Cluster', 'category_radar_intensity')
-        plot_side_by_side_radar(intensity_data, self.num_categories, 'Group', 'Cluster', 'radar_intensity')
-        histogram(self.data, self.raw_columns)
-        clustered_violins_with_sizes(self.data, self.raw_columns, self.original_data.shape[0])
-        clustered_violins_with_stacked_sizes(self.data, self.raw_columns, self.original_data.shape[0])
-        total_votes(self.data, self.raw_columns)
