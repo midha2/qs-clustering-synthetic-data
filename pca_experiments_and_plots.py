@@ -14,19 +14,19 @@ def total_votes(data, category_columns):
     vote_totals = data[category_columns].sum()
 
     # Create the bar chart
-    plt.figure(figsize=(10, 6))
-    vote_totals.plot(kind='bar', color='skyblue', edgecolor='black')
+    fig, ax = plt.subplots(figsize=(10, 6))
+    vote_totals.plot(kind='bar', color='skyblue', edgecolor='black', ax=ax)
 
     # Customize the chart
-    plt.title('Total Votes by Category', fontsize=16)
-    plt.xlabel('Category', fontsize=14)
-    plt.ylabel('Total Votes', fontsize=14)
-    plt.xticks(rotation=45, fontsize=12)
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    ax.set_title('Total Votes by Category', fontsize=16)
+    ax.set_xlabel('Category', fontsize=14)
+    ax.set_ylabel('Total Votes', fontsize=14)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, fontsize=12)
+    ax.grid(axis='y', linestyle='--', alpha=0.7)
 
-    # Display the chart
+    # Adjust layout and return the figure
     plt.tight_layout()
-    plt.savefig('total_votes.png')
+    return fig
 
 def histogram(data, category_columns):
     num_categories = len(category_columns)
@@ -61,18 +61,23 @@ def histogram(data, category_columns):
     for j in range(num_categories, len(axes)):
         axes[j].axis("off")
 
-    # Adjust layout and save plot
+    # Adjust layout and return the figure
     plt.tight_layout()
-    plt.savefig("vote_distributions.png")
+    return fig
 
 def violin(data, categories):
-    plt.figure(figsize=(10, 6))
-    sns.violinplot(data=data[categories])
-    plt.title('Violin Plot of Category Responses')
-    plt.xlabel('Categories')
-    plt.ylabel('Response Values')
-    plt.grid(True)
-    plt.savefig('violin.png')
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.violinplot(data=data[categories], ax=ax)
+
+    # Customize the plot
+    ax.set_title('Violin Plot of Category Responses')
+    ax.set_xlabel('Categories')
+    ax.set_ylabel('Response Values')
+    ax.grid(True)
+
+    # Adjust layout and return the figure
+    plt.tight_layout()
+    return fig
 
 def clustered_violins_with_stacked_sizes(data, categories, original_data_size):
     # Melt the data once for global min and max
@@ -88,6 +93,8 @@ def clustered_violins_with_stacked_sizes(data, categories, original_data_size):
 
     filtered_data_size = len(data)  # Size of the filtered dataset
     filtered_fraction = filtered_data_size / original_data_size  # Fraction of filtered data size
+
+    figures = dict()
 
     for cluster in data['Cluster'].unique():
         cluster_data = data[data['Cluster'] == cluster]  # Filter data for the cluster
@@ -112,7 +119,7 @@ def clustered_violins_with_stacked_sizes(data, categories, original_data_size):
             var_name='Category', 
             value_name='Value'
         )
-        sns.violinplot(x='Category', y='Value', data=melted_cluster_data, palette='Set2', ax=axes[0])
+        sns.violinplot(x='Category', y='Value', data=melted_cluster_data, ax=axes[0], hue='Category', legend=False)
         axes[0].set_title(f'Violin Plot for Cluster {cluster}')
         axes[0].set_xlabel('Category')
         axes[0].set_ylabel('Value')
@@ -140,24 +147,88 @@ def clustered_violins_with_stacked_sizes(data, categories, original_data_size):
         axes[1].text(
             x=0, 
             y=current_bottom + cluster_sizes_filtered[current_cluster_index] * filtered_fraction / 2,
-            s=f'{cluster_fraction * 100:.1f}%', 
+            s=f'{cluster_fraction * 100:.1f}%\nSize: {cluster_size}', 
             ha='center', va='center', color='white', weight='bold', fontsize=10
         )
 
         # Add a title with the original dataset size
         fig.suptitle(f'Original Dataset Size: {original_data_size}', fontsize=12, y=0.98)
 
-        # Save the figure
+        # Adjust layout and return the figure
         plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to accommodate the title
-        plt.savefig(f'violin_cluster_{cluster}_with_stacked_size.png')
-        plt.close()
+        figures[cluster] = fig
+
+    return figures
+
+def demographic_grouped_bar(data, demographic_columns):
+    clusters = sorted(data['Cluster'].unique())  # Sort clusters for consistent order
+
+    figures = dict()
+
+    for col in demographic_columns:
+        # Prepare data for grouped bars
+        cluster_counts = {cluster: data[data['Cluster'] == cluster][col].value_counts() for cluster in clusters}
+        unique_values = sorted(data[col].dropna().unique())  # Ensure consistent ordering of values
+
+        # Parameters for bar spacing
+        group_width = 0.8  # Total width for each group
+        bar_width = group_width / len(clusters) * 0.8  # Slightly reduce individual bar width for spacing
+        group_spacing = 1.5  # Distance between groups
+
+        # Compute positions for groups and clusters
+        x = [i * group_spacing for i in range(len(unique_values))]
+        offsets = [-bar_width * (len(clusters) - 1) / 2 + i * bar_width for i in range(len(clusters))]
+
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        # Plot bars for each cluster
+        for offset, cluster in zip(offsets, clusters):
+            counts = [cluster_counts[cluster].get(value, 0) for value in unique_values]
+            bars = ax.bar(
+                [pos + offset for pos in x],
+                counts,
+                width=bar_width,
+                label=f'Cluster {cluster}',
+                edgecolor='black'
+            )
+            
+            # Add labels to each bar
+            for bar, count in zip(bars, counts):
+                if count > 0:  # Only label if count is non-zero
+                    ax.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        bar.get_height() + 0.5,
+                        f'{count}',
+                        ha='center',
+                        va='bottom',
+                        fontsize=9
+                    )
+
+        # Customize the chart
+        ax.set_title(f'Grouped Bar Chart for {col}')
+        ax.set_xlabel(col)
+        ax.set_ylabel('Count')
+        ax.set_xticks(x)
+        ax.set_xticklabels(unique_values, rotation=45, fontsize=10)
+        ax.legend(title='Clusters')
+        ax.grid(axis='y', linestyle='--', alpha=0.7)
+
+        # Save the chart
+        figures[col] = fig
+    
+    return figures
 
 class FilterData:
-    def __init__(self, data, raw_columns):
+    def __init__(self, data, raw_columns, dem_columns=None):
         self.data = data.copy()
-        self.original_data = data.copy()
         self.raw_columns = raw_columns.copy()
         self.num_categories = len(raw_columns)
+        if 'Cluster' not in data.columns:
+            self.reClusterData()
+        self.original_data = data.copy()
+        self.dem_cols = dem_columns
+        self.plots = dict()
+        self.make_plots()
     
     def rename_column(self, col_to_rename, new_name):
         assert col_to_rename in self.data.columns, "Cannot rename column that does not exist!"
@@ -187,7 +258,11 @@ class FilterData:
         for i in range(k_start, k_max+1):
             kmeans = KMeans(n_clusters = i, n_init=10).fit(data_scaled)
             labels = kmeans.labels_
-            data.loc[:, 'Cluster'] = labels
+            if 'Cluster' in data.columns:
+                data.loc[:, 'Cluster'] = labels
+            else:
+                data['Cluster'] = labels
+            
             sil[i - k_start] = silhouette_score(data_scaled, labels, metric = 'euclidean')
         return np.argmax(sil) + k_start
     
@@ -199,7 +274,10 @@ class FilterData:
         data_scaled = scaler.fit_transform(data)
         kmeans_model = KMeans(n_clusters=optimal_number_of_clusters, n_init=10)
         clusters = kmeans_model.fit_predict(data_scaled)
-        self.data.loc[:, 'Cluster'] = clusters
+        if 'Cluster' in self.data.columns:
+            self.data.loc[:, 'Cluster'] = clusters
+        else:
+            self.data['Cluster'] = clusters
         return data
 
     def unfilter_data(self):
@@ -207,16 +285,20 @@ class FilterData:
         self.data = self.original_data.copy()
     
     def make_plots(self):
-        histogram(self.data, self.raw_columns)
-        violin(self.data, self.raw_columns)
-        clustered_violins_with_stacked_sizes(self.data, self.raw_columns, self.original_data.shape[0])
-        total_votes(self.data, self.raw_columns)
+        if 'Cluster' not in self.data.columns:
+            self.reClusterData()
+        self.plots['histogram'] = histogram(self.data, self.raw_columns)
+        self.plots['violin'] = violin(self.data, self.raw_columns)
+        self.plots['clustered_violins'] = clustered_violins_with_stacked_sizes(self.data, self.raw_columns, self.original_data.shape[0])
+        self.plots['total_votes'] = total_votes(self.data, self.raw_columns)
+        if self.dem_cols:
+            self.plots['dem'] = demographic_grouped_bar(self.data, self.dem_cols)
 
     def to_csv(self, name='data.csv'):
         self.data.to_csv(name)
 
 
-#### WE ARENT USING THESE ####
+#### =================================== WE ARENT USING THESE =================================== ####
 
 def run_pca(df):
     print('Running pca...')
