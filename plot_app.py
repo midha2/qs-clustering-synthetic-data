@@ -8,8 +8,8 @@ import csv
 # Title of the application
 st.title("Data Analysis Plots")
 
-num_responses = int(2**10)
-num_categories = 5
+num_responses = int(2**11)
+num_categories = 9
 
 column_key_to_strings = {'party': {1: 'strong_rep', 2: 'ns_rep', 3: 'lean_rep', 4: 'undec/ind', 5: 'lean_dem', 6: 'ns_dem', 7: 'strong_dem'},
                          'age': {1: 'gen-z', 2: 'millenial', 3: 'gen-x', 4: 'boomer', 99: '<18'},
@@ -19,10 +19,10 @@ column_key_to_strings = {'party': {1: 'strong_rep', 2: 'ns_rep', 3: 'lean_rep', 
 
 # Initialize baseline data only once
 if "data_loaded" not in st.session_state:
-    # groups = [Group(name='Group_1', occurrence_prob=0.3, preferences=[2, 2, -2, -2, 7]), 
-    #           Group('Group_2', 0.2, [0, -3, 2, 2, 7]), 
-    #           Group('Group_3', 0.3, [7, -1, -3, 2, 0]), 
-    #           Group('Group_4', 0.2, [5, -1, 1, 0, -7])]
+    # groups = [Group(name='Group_1', occurrence_prob=0.3, preferences=[2, 2, -2, -2, 7, 0, 0, 0, 0], sigma=0.1), 
+    #           Group('Group_2', 0.2, [2, -3, 2, 2, 7, 0, 0, 0, 0], sigma=0.1), 
+    #           Group('Group_3', 0.3, [2, -1, -3, 2, 0, 0, 0, 0, 0], sigma=0.1), 
+    #           Group('Group_4', 0.2, [2, -1, 1, 0, -7, 0, 0, 0, 0], sigma=0.1)]
     # synthetic_data_generator = SkewedSyntheticData(groups, num_categories, num_responses, credit_budget=80)
     # data = synthetic_data_generator.data
     # raw_columns = synthetic_data_generator.raw_columns
@@ -101,6 +101,9 @@ st.title("Clustered Violin Plots")
 for cluster, fig in st.session_state.data.plots['clustered_violins'].items():
     st.subheader(f'Cluster {cluster}')
     st.pyplot(fig)
+
+st.title("Cluster Differences")
+st.pyplot(data.plots['mean_comp'])
 
 if st.session_state.data.dem_cols:
     st.header("Demographic Information")
