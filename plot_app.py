@@ -1,6 +1,6 @@
 import streamlit as st
 from PIL import Image
-from pca_experiments_and_plots import FilterData
+from filter_data_and_plots import FilterData, cluster_wise_mean_comparison
 from skewed_synthetic_data_generator import Group, SkewedSyntheticData
 import pandas as pd
 import csv
@@ -19,93 +19,97 @@ column_key_to_strings = {'party': {1: 'strong_rep', 2: 'ns_rep', 3: 'lean_rep', 
 
 # Initialize baseline data only once
 if "data_loaded" not in st.session_state:
-    # groups = [Group(name='Group_1', occurrence_prob=0.3, preferences=[2, 2, -2, -2, 7, 0, 0, 0, 0], sigma=0.1), 
-    #           Group('Group_2', 0.2, [2, -3, 2, 2, 7, 0, 0, 0, 0], sigma=0.1), 
-    #           Group('Group_3', 0.3, [2, -1, -3, 2, 0, 0, 0, 0, 0], sigma=0.1), 
-    #           Group('Group_4', 0.2, [2, -1, 1, 0, -7, 0, 0, 0, 0], sigma=0.1)]
-    # synthetic_data_generator = SkewedSyntheticData(groups, num_categories, num_responses, credit_budget=80)
-    # data = synthetic_data_generator.data
-    # raw_columns = synthetic_data_generator.raw_columns
-
-    
+    st.session_state.filter_ranges = {}
     data = pd.read_csv('dataset_final-subset.tab', sep='\t', skip_blank_lines=True)
     raw_columns = ["QVgay", "QVgun","QVwall","QVpaidL","QVAA","QVgender","QVminW","QVabortion","QVdeficit","QVenviro"]
     data.dropna(how='any', inplace=True)
+    
     for col in column_key_to_strings.keys():
         data[col] = data[col].round().astype(int) 
+
     pparty_dict = column_key_to_strings['party'].copy()
     for k, v in column_key_to_strings['party'].items():
         if 'rep' in v:
             pparty_dict[k] = 'rep'
         if 'dem' in v:
             pparty_dict[k] = 'dem'
+    
     data['pparty'] = data['party'].map(pparty_dict)
     data.replace(column_key_to_strings, inplace=True)
 
-
-    print(len(data))
-    print(data)
-    num_categories = len(raw_columns)
-    # st.session_state.data = FilterData(data, raw_columns, ['Group'])
     st.session_state.data = FilterData(data, raw_columns, list(column_key_to_strings.keys()) + ['pparty'])
     st.session_state.data_loaded = True
 
-if "filter_key" not in st.session_state:
-    st.session_state.filter_key = 0
+data = st.session_state.data.data
+original = st.session_state.data.original_data
 
-# Filter options
+# Sidebar: Filter Options
 st.sidebar.header("Filter Options")
-column_to_filter = st.sidebar.selectbox("Select column to filter", st.session_state.data.raw_columns, key=st.session_state.filter_key)
-quantity = st.sidebar.number_input("Quantity")
-condition = st.sidebar.radio("Condition", ["greater", "less"])
+column_to_filter = st.sidebar.selectbox("Select column to filter", st.session_state.data.raw_columns)
 
-# Apply filter button
+if column_to_filter not in st.session_state.filter_ranges:
+    min_val, max_val = float(data[column_to_filter].min()), float(data[column_to_filter].max())
+    st.session_state.filter_ranges[column_to_filter] = (min_val, max_val)
+
+range_selected = st.sidebar.slider(
+    "Select value range",
+    min_value=float(original[column_to_filter].min()),
+    max_value=float(original[column_to_filter].max()),
+    value=st.session_state.filter_ranges[column_to_filter]
+)
+
+st.session_state.filter_ranges[column_to_filter] = range_selected
+
 if st.sidebar.button("Apply Filter"):
-    st.session_state.data.filter_data(column_to_filter, quantity, condition)
+    min_val, max_val = st.session_state.filter_ranges[column_to_filter]
+    st.session_state.data.filter_data(column_to_filter, min_val, max_val)
     st.session_state.data.reClusterData()
     st.session_state.data.make_plots()
 
-# Clear filter button
 if st.sidebar.button("Clear Filter"):
     st.session_state.data.unfilter_data()
+    st.session_state.filter_ranges[column_to_filter] = (original[column_to_filter].min(), original[column_to_filter].max())
+    data = st.session_state.data.data
     st.session_state.data.make_plots()
 
-# Rename columns
-st.sidebar.header("Rename columns")
-column_to_replace = st.sidebar.text_input("Select column to replace")
-new_column = st.sidebar.text_input("New name for column")
+st.sidebar.header("Cumulative Difference Threshold")
+cumulative_diff_threshold = st.sidebar.slider("Select cumulative difference threshold", 0.0, 1.0, 0.9, 0.1)
 
-if st.sidebar.button("Replace column") and column_to_replace and new_column and column_to_replace in st.session_state.data.raw_columns:
-    st.session_state.data.rename_column(column_to_replace, new_column)
-    st.session_state.data.make_plots()
+if st.session_state.data.cumulative_diff_threshold != cumulative_diff_threshold:
+    st.session_state.data.set_cumulative_diff_threshold(cumulative_diff_threshold)
+    st.session_state.data.plots['mean_comp'], st.session_state.data.plots['opt_mean_comp'] = cluster_wise_mean_comparison(
+        st.session_state.data.data, st.session_state.data.raw_columns, st.session_state.data.cumulative_diff_threshold
+    )
 
-    # Update the widget keys to force re-rendering
-    st.session_state.filter_key += 1
-
-# To CSV
+# Export to CSV
 st.sidebar.header("Export to CSV")
 csv_filename = st.sidebar.text_input("CSV filename (do NOT include .csv)")
 if st.sidebar.button("Export") and csv_filename:
     st.session_state.data.to_csv(csv_filename + '.csv')
 
-data = st.session_state.data
-# Display plots
-st.header("Histograms")
-st.pyplot(data.plots['total_votes'])
-st.pyplot(data.plots['histogram'])
+# Tabs for visualization
+tab1, tab2 = st.tabs(["Basic Plots", "All Plots"])
 
-st.header("Violin Plot")
-st.pyplot(data.plots['violin'])
+with tab1:
+    st.header("Basic Plots")
+    st.pyplot(st.session_state.data.plots['total_votes'])
+    st.pyplot(st.session_state.data.plots['histogram'])
 
-st.title("Clustered Violin Plots")
-for cluster, fig in st.session_state.data.plots['clustered_violins'].items():
-    st.subheader(f'Cluster {cluster}')
-    st.pyplot(fig)
-
-st.title("Cluster Differences")
-st.pyplot(data.plots['mean_comp'])
-
-if st.session_state.data.dem_cols:
-    st.header("Demographic Information")
-    for fig in st.session_state.data.plots['dem'].values():
+with tab2:
+    st.header("All Plots")
+    st.pyplot(st.session_state.data.plots['total_votes'])
+    st.pyplot(st.session_state.data.plots['histogram'])
+    st.pyplot(st.session_state.data.plots['violin'])
+    
+    st.title("Clustered Violin Plots")
+    for cluster, fig in st.session_state.data.plots['clustered_violins'].items():
+        st.subheader(f'Cluster {cluster}')
         st.pyplot(fig)
+
+    st.title("Cluster Differences")
+    st.pyplot(st.session_state.data.plots['mean_comp'])
+
+    if st.session_state.data.dem_cols:
+        st.header("Demographic Information")
+        for fig in st.session_state.data.plots['dem'].values():
+            st.pyplot(fig)
