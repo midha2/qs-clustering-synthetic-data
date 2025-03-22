@@ -396,8 +396,8 @@ class FilterData:
         return self.data
     
     def filter_data(self, col, minVal, maxVal):
-        self.data = self.data[self.data[col] < maxVal]
-        self.data = self.data[self.data[col] > minVal]
+        self.data = self.data[self.data[col] <= maxVal]
+        self.data = self.data[self.data[col] >= minVal]
 
         return self.data
     
@@ -446,9 +446,9 @@ class FilterData:
         self.plots['violin'] = violin(self.data, self.raw_columns)
         self.plots['clustered_violins'] = clustered_violins_with_stacked_sizes(self.data, self.raw_columns, self.original_data.shape[0])
         self.plots['total_votes'] = total_votes(self.data, self.raw_columns)
-        if self.dem_cols:
-            self.plots['dem'] = demographic_grouped_bar(self.data, self.dem_cols)
-        self.plots['mean_comp'], self.plots['opt_mean_comp'] = cluster_wise_mean_comparison(self.data, self.raw_columns, self.cumulative_diff_threshold)
+        # if self.dem_cols:
+        #     self.plots['dem'] = demographic_grouped_bar(self.data, self.dem_cols)
+        # self.plots['mean_comp'], self.plots['opt_mean_comp'] = cluster_wise_mean_comparison(self.data, self.raw_columns, self.cumulative_diff_threshold)
 
     def to_csv(self, name='data.csv'):
         self.data.to_csv(name)
