@@ -5,12 +5,35 @@ from skewed_synthetic_data_generator import Group, SkewedSyntheticData
 import pandas as pd
 import csv
 
+def show_policy_mapping():
+    with st.expander("View Policy Descriptions and Label Mappings"):
+        data = {
+            "Policy Proposal": [
+                "Giving same sex couples the legal right to adopt a child",
+                "Laws making it more difficult for people to buy a gun",
+                "Building a wall on the US Border with Mexico",
+                "Require employers to pay women and men the same amount for the same work",
+                "Preferential hiring and promotion of blacks to address past discrimination",
+                "Require employers to offer paid leave to parents of new children",
+                "Raising the minimum wage to 15$/h over the next 3 years",
+                "A nationwide ban on abortion with only very limited exceptions",
+                "Cap on federal spending",
+                "Regulation for environment"
+            ],
+            "Label": [
+                "QVgay", "QVgun", "QVwall", "QVgender", "QVAA", "QVpaidL",
+                "QVminW", "QVabortion", "QVdeficit", "QVenviro"
+            ]
+        }
+        df = pd.DataFrame(data)
+        st.table(df)
+
 def show_plot_description(plot_id: str, description: str, label: str = None):
     desc_key = f"{plot_id}_desc_opened"
     log_key = f"{desc_key}_logged"
 
     if label is None:
-        label = f"ℹ️ Show {plot_id.replace('_', ' ').title()} Description"
+        label = f"Show {plot_id.replace('_', ' ').title()} Description"
 
     show_desc = st.toggle(label, key=desc_key)
 
@@ -157,11 +180,40 @@ if st.sidebar.button("Export Clickstream") and st.session_state.clickstream_log:
     st.sidebar.success("Clickstream data exported as 'clickstream_log.csv'")
 
 # Tabs for visualization
-tab1, tab2 = st.tabs(["Interface 1", "Interface 2"])
+tab3, tab1, tab2 = st.tabs(["Quadratic Survey Explanation", "Interface 1", "Interface 2"])
+
+with tab3:
+    st.session_state.active_tab = "Quadratic Survey Explanation"
+    st.header("What is a Quadratic Survey Question")
+
+    st.markdown("""
+    A quadratic survey question is a collective decision-making mechanism used to survey individual preferences across a set of options, usually under the scenario where there exist some resource constraints where it is not possible to fulfill all options.
+    
+    ### How do Quadratic Survey Questions Work
+    There are three elements to a Quadratic Survey Question:
+    
+    1) **Budget**: For each question, it provides you with a budget. You will use this budget to purchase votes. You do not need to use up all your budget.
+
+    2) **Voting on options**: As long as you have enough budget, you can cast multiple votes for each option. You can vote in favor or against any of the options. You can also choose not to vote on any of the options.
+
+    3) **Cost calculation**: The cost is the sum of the quadratic votes you voted across the options. For example, if there are three options, where you voted 1 vote, -2 votes, and 0 votes, you will be charged 1 + 4 + 0 = 5 dollars from your given budget. Our survey system will do the calculation for you. We also provide the quadratic table below for your reference:
+    """)
+
+    st.markdown("#### Quadratic Cost Table")
+    cost_table = pd.DataFrame({
+        "# Votes": list(range(1, 11)),
+        "Cost": [1, 4, 9, 16, 25, 35, 49, 64, 81, 100]
+    })
+    st.table(cost_table)
+
+    st.markdown("### Watch an Explanation Video")
+    st.video("https://www.youtube.com/watch?v=8Y5MlP0u1_U")
+
 
 with tab1:
     st.session_state.active_tab = "Interface 1"
     st.header("Interface 1")
+    show_policy_mapping()
     show_plot_description(
         plot_id="i1bar_chart",
         description="A bar chart represents categorical data with rectangular bars. The length of each bar corresponds to sum of votes of a particular policy.",
@@ -177,6 +229,7 @@ with tab1:
 with tab2:
     st.session_state.active_tab = "Interface 2"
     st.header("Interface 2")
+    show_policy_mapping()
 
     show_plot_description(
         plot_id="i2bar_chart",
