@@ -3,7 +3,7 @@ from PIL import Image
 from filter_data_and_plots import FilterData, cluster_wise_mean_comparison
 from skewed_synthetic_data_generator import Group, SkewedSyntheticData
 import pandas as pd
-import csv
+import io
 
 def show_policy_mapping():
     with st.expander("View Policy Descriptions and Label Mappings"):
@@ -66,8 +66,8 @@ column_key_to_strings = {'party': {1: 'strong_republican', 2: 'moderate_republic
 plot_keys = {
     "histogram": "Histogram: A histogram represents the distribution of a dataset by grouping data into bins. The height of each bar shows how many data points fall within that range.",
     "bar_chart": "Bar Chart: A bar chart represents categorical data with rectangular bars. The length of each bar corresponds to sum of votes of a particular policy.",
-    "violin": "Violin Plot: A violin plot combines aspects of a box plot and a density plot, showing the distribution of the data along with key statistical values like the median and interquartile range. You can see the number of votes corresponding to each number by the thickness of each violin.",
-    "clustered_violin": "Clustered Violin Plot: This is a violin plot corresponding to one cluster (group) we have found in the data. A cluster may have similar response patterns in certain policies, allowing us to group them together. To the right, you can see the proportion of the population the cluster makes up."
+    "violin": "Violin Plot: A violin plot shows how people’s answers are spread out for each option. The wider sections of the plot mean more people chose that answer. It also highlights important values, such as the median answer and how much the responses vary. This helps you quickly see which answers were most and least common.",
+    "clustered_violin": "Clustered Violin Plot: This is a violin plot corresponding to one cluster (group of participants with common responses) we have found in the data. A cluster may have similar response patterns in certain policies, allowing us to group them together. To the right, you can see the proportion of the population the cluster makes up."
 }
 
 # Initialize baseline data only once
@@ -174,10 +174,16 @@ st.sidebar.header("Clickstream Tracking")
 st.session_state.clickstream_enabled = st.sidebar.checkbox("Enable Clickstream Tracking", value=st.session_state.clickstream_enabled)
 
 # Export
-if st.sidebar.button("Export Clickstream") and st.session_state.clickstream_log:
+if st.session_state.clickstream_log:
     df_log = pd.DataFrame(st.session_state.clickstream_log)
-    df_log.to_csv("clickstream_log.csv", index=False)
-    st.sidebar.success("Clickstream data exported as 'clickstream_log.csv'")
+    csv_buffer = io.StringIO()
+    df_log.to_csv(csv_buffer, index=False)
+    st.sidebar.download_button(
+        label="Download Clickstream CSV",
+        data=csv_buffer.getvalue(),
+        file_name="clickstream_log.csv",
+        mime="text/csv"
+    )
 
 # Tabs for visualization
 tab3, tab1, tab2 = st.tabs(["Quadratic Survey Explanation", "Interface 1", "Interface 2"])
@@ -245,13 +251,14 @@ with tab2:
 
     show_plot_description(
         plot_id="violin_plot",
-        description="A violin plot combines aspects of a box plot and a density plot, showing the distribution of the data along with key statistical values like the median and interquartile range. You can see the number of votes corresponding to each number by the thickness of each violin.")
+        description="Violin Plot: A violin plot shows how people’s answers are spread out for each option. The wider sections of the plot mean more people chose that answer. It also highlights important values, such as the middle answer and how much the responses vary. This helps you quickly see which answers were most and least common."
+    )
     st.pyplot(st.session_state.data.plots['violin'])
 
     st.title("Clustered Violin Plots")
     show_plot_description(
             plot_id= "clustered_violin_plots",
-            description="This is a violin plot corresponding to one cluster (group) we have found in the data. A cluster may have similar response patterns in certain policies, allowing us to group them together. To the right, you can see the proportion of the population the cluster makes up."
+            description="Clustered Violin Plot: This is a violin plot corresponding to one cluster (group of participants with common responses) we have found in the data. A cluster may have similar response patterns in certain policies, allowing us to group them together. To the right, you can see the proportion of the population the cluster makes up."
         )
     for cluster, fig in st.session_state.data.plots['clustered_violins'].items():
         st.pyplot(fig)
