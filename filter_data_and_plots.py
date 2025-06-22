@@ -12,28 +12,25 @@ from scipy.stats import f_oneway
 from matplotlib.patches import Patch
 
 def total_votes(data, category_columns):
-    # Calculate the sum of votes for each column
     vote_totals = data[category_columns].sum()
 
     # Create the bar chart
     fig, ax = plt.subplots(figsize=(10, 6))
     vote_totals.plot(kind='bar', color='skyblue', edgecolor='black', ax=ax)
 
-    # Customize the chart
     ax.set_title('Total Votes by Category', fontsize=16)
     ax.set_xlabel('Category', fontsize=14)
     ax.set_ylabel('Total Votes', fontsize=14)
     ax.set_xticklabels(ax.get_xticklabels(), rotation=45, fontsize=12)
     ax.grid(axis='y', linestyle='--', alpha=0.7)
 
-    # Adjust layout and return the figure
     plt.tight_layout()
     return fig
 
 def histogram(data, category_columns):
     num_categories = len(category_columns)
-    ncols = 3  # Set number of columns (e.g., 3)
-    nrows = (num_categories + ncols - 1) // ncols  # Calculate rows needed based on categories
+    ncols = 3 
+    nrows = (num_categories + ncols - 1) // ncols 
 
     # Plot histograms for each category in data
     fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows))
@@ -63,7 +60,6 @@ def histogram(data, category_columns):
     for j in range(num_categories, len(axes)):
         axes[j].axis("off")
 
-    # Adjust layout and return the figure
     plt.tight_layout()
     return fig
 
@@ -71,17 +67,89 @@ def violin(data, categories):
     fig, ax = plt.subplots(figsize=(10, 6))
     sns.violinplot(data=data[categories], ax=ax)
 
-    # Customize the plot
     ax.set_title('Violin Plot of Category Responses')
     ax.set_xlabel('Categories')
     ax.set_ylabel('Response Values')
     ax.grid(True)
 
-    # Adjust layout and return the figure
     plt.tight_layout()
     return fig
 
-def clustered_violins_with_stacked_sizes(data: pd.DataFrame, categories, original_data_size, cluster_col = 'Cluster'):
+def clustered_violins_with_text_sizes(data: pd.DataFrame, categories, original_data_size, cluster_col='Cluster'):
+    # Global font and resolution settings
+    plt.rcParams['figure.dpi'] = 150
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+
+    # Melt the data once for global min and max
+    melted_data = data.melt(
+        id_vars=[cluster_col],
+        value_vars=categories,
+        var_name='Category',
+        value_name='Value'
+    )
+
+    y_min, y_max = melted_data['Value'].min(), melted_data['Value'].max()
+    filtered_data_size = len(data)
+    filtered_fraction = filtered_data_size / original_data_size
+
+    figures = dict()
+
+    cluster_sizes = {
+        c: len(data[data[cluster_col] == c])
+        for c in sorted(data[cluster_col].unique())
+    }
+
+    for cluster in data[cluster_col].unique():
+        cluster_data = data[data[cluster_col] == cluster]
+        cluster_size = len(cluster_data)
+        cluster_fraction = cluster_size / original_data_size
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        melted_cluster_data = cluster_data.melt(
+            id_vars=[cluster_col],
+            value_vars=categories,
+            var_name='Category',
+            value_name='Value'
+        )
+
+        sns.violinplot(x='Category', y='Value', data=melted_cluster_data, ax=ax, hue='Category', legend=False)
+
+        ax.set_title(
+            f'Cluster {cluster} | Size: {cluster_size} ({cluster_fraction*100:.1f}%)\n'
+            f'Filtered Data: {filtered_data_size} / {original_data_size} ({filtered_fraction*100:.1f}%)',
+            fontsize=13
+        )
+        ax.set_xlabel('Category', fontsize=11)
+        ax.set_ylabel('Value', fontsize=11)
+        ax.tick_params(axis='both', labelsize=10)
+        ax.set_ylim(y_min, y_max)
+        ax.grid(True)
+
+        size_lines = [
+            f'Cluster {c}: {sz} ({sz / original_data_size * 100:.1f}%){" ←" if c == cluster else ""}'
+            for c, sz in cluster_sizes.items()
+        ]
+        size_text = '\n'.join(size_lines)
+
+        ax.text(
+            1.01, 0.95, size_text,
+            transform=ax.transAxes,
+            ha='left', va='top',
+            fontsize=10,
+            bbox=dict(boxstyle='round', facecolor='white', edgecolor='gray')
+        )
+
+        plt.tight_layout()
+        figures[cluster] = fig
+
+    return figures
+
+def clustered_violins_with_stacked_sizes(data: pd.DataFrame, categories, original_data_size, cluster_col='Cluster'):
+    # Set global font and resolution settings
+    plt.rcParams['figure.dpi'] = 150
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+
     # Melt the data once for global min and max
     melted_data = data.melt(
         id_vars=[cluster_col], 
@@ -89,21 +157,18 @@ def clustered_violins_with_stacked_sizes(data: pd.DataFrame, categories, origina
         var_name='Category', 
         value_name='Value'
     )
-    
-    # Find global min and max for y-axis
-    y_min, y_max = melted_data['Value'].min(), melted_data['Value'].max()
 
-    filtered_data_size = len(data)  # Size of the filtered dataset
-    filtered_fraction = filtered_data_size / original_data_size  # Fraction of filtered data size
+    y_min, y_max = melted_data['Value'].min(), melted_data['Value'].max()
+    filtered_data_size = len(data)
+    filtered_fraction = filtered_data_size / original_data_size
 
     figures = dict()
 
     for cluster in data[cluster_col].unique():
-        cluster_data = data[data[cluster_col] == cluster]  # Filter data for the cluster
-        cluster_size = len(cluster_data)  # Size of the current cluster
-        cluster_fraction = cluster_size / original_data_size  # Fraction of original data size
+        cluster_data = data[data[cluster_col] == cluster]
+        cluster_size = len(cluster_data)
+        cluster_fraction = cluster_size / original_data_size
 
-        # Calculate cluster fractions for filtered data
         cluster_sizes_filtered = [
             len(data[data[cluster_col] == c]) / filtered_data_size
             for c in data[cluster_col].unique()
@@ -111,7 +176,6 @@ def clustered_violins_with_stacked_sizes(data: pd.DataFrame, categories, origina
         cumulative_sizes = [sum(cluster_sizes_filtered[:i]) for i in range(len(cluster_sizes_filtered))]
         cluster_colors = ['blue' if c == cluster else 'gray' for c in data[cluster_col].unique()]
 
-        # Create a figure with subplots
         fig, axes = plt.subplots(1, 2, figsize=(14, 6), gridspec_kw={'width_ratios': [2, 1]})
 
         # Violin Plot
@@ -121,11 +185,17 @@ def clustered_violins_with_stacked_sizes(data: pd.DataFrame, categories, origina
             var_name='Category', 
             value_name='Value'
         )
-        sns.violinplot(x='Category', y='Value', data=melted_cluster_data, ax=axes[0], hue='Category', legend=False)
-        axes[0].set_title(f'Violin Plot for Cluster {cluster}')
-        axes[0].set_xlabel('Category')
-        axes[0].set_ylabel('Value')
+        sns.violinplot(
+            x='Category', y='Value',
+            data=melted_cluster_data,
+            ax=axes[0], hue='Category',
+            legend=False
+        )
+        axes[0].set_title(f'Violin Plot for Cluster {cluster}', fontsize=13)
+        axes[0].set_xlabel('Category', fontsize=11)
+        axes[0].set_ylabel('Value', fontsize=11)
         axes[0].set_ylim(y_min, y_max)
+        axes[0].tick_params(axis='both', labelsize=10)
         axes[0].grid(True)
 
         # Stacked Bar Plot
@@ -138,12 +208,13 @@ def clustered_violins_with_stacked_sizes(data: pd.DataFrame, categories, origina
                 edgecolor='black'
             )
         
-        axes[1].set_title(f'Cluster Sizes (Filtered Data: {filtered_fraction * 100:.1f}%)')
+        axes[1].set_title(f'Cluster Sizes (Filtered: {filtered_fraction * 100:.1f}%)', fontsize=13)
         axes[1].set_ylim(0, 1)
-        axes[1].set_ylabel('Fraction of Original Dataset')
+        axes[1].set_ylabel('Fraction of Original Dataset', fontsize=11)
         axes[1].set_xlabel('')
+        axes[1].tick_params(axis='both', labelsize=10)
 
-        # Annotate the current cluster size
+        # Annotate current cluster
         current_cluster_index = list(data[cluster_col].unique()).index(cluster)
         current_bottom = cumulative_sizes[current_cluster_index] * filtered_fraction
         axes[1].text(
@@ -153,11 +224,11 @@ def clustered_violins_with_stacked_sizes(data: pd.DataFrame, categories, origina
             ha='center', va='center', color='white', weight='bold', fontsize=10
         )
 
-        # Add a title with the original dataset size
+        # Add super title
         fig.suptitle(f'Original Dataset Size: {original_data_size}', fontsize=12, y=0.98)
 
-        # Adjust layout and return the figure
-        plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to accommodate the title
+        # Layout adjustment
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
         figures[cluster] = fig
 
     return figures
